@@ -1,5 +1,9 @@
 package com.example.ambientsoundlevelreader
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,14 +21,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
+import androidx.work.PeriodicWorkRequest
+import androidx.work.WorkManager
 import com.example.ambientsoundlevelreader.play.PlayerImpl
 import com.example.ambientsoundlevelreader.record.AudioRecorderImpl
+import com.example.ambientsoundlevelreader.service.RecordingService
 import com.example.ambientsoundlevelreader.ui.theme.AmbientSoundLevelReaderTheme
+import com.example.ambientsoundlevelreader.worker.RecordingWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
+
+    private val CHANNEL_ID = "ForegroundServiceChannel"
 
     private val recorder by lazy {
         AudioRecorderImpl(applicationContext)
@@ -47,6 +58,15 @@ class MainActivity : ComponentActivity() {
             0
         )
 
+        createNotificationChannel()
+
+        val serviceIntent = Intent(this@MainActivity, RecordingService::class.java)
+
+        val workRequest = PeriodicWorkRequest.Builder(RecordingWorker::class.java, 15, TimeUnit.MINUTES)
+            .build()
+
+        WorkManager.getInstance(applicationContext).enqueue(workRequest)
+
         setContent {
             AmbientSoundLevelReaderTheme {
                 Column(
@@ -56,23 +76,19 @@ class MainActivity : ComponentActivity() {
                 ) {
 
                     Button(onClick = {
-                        File(cacheDir, "recorded_audio.mp3").also {
-                            recorder.onStart(it)
-                            audioFile = it
-                        }
-
+                        startService(serviceIntent)
                         logAmp = true
 
 
                     }) {
-                        Text(text = "Start recording")
+                        Text(text = "Start recording service")
                     }
 
                     Button(onClick = {
-                        recorder.onStop()
+                        stopService(serviceIntent)
                         logAmp = false
                     }) {
-                        Text(text = "Stop recording")
+                        Text(text = "Stop recording service")
                     }
 
                     Button(onClick = {
@@ -104,7 +120,7 @@ class MainActivity : ComponentActivity() {
             scope.launch {
                 while (logAmp) {
                     delay(1000) // delay for 1 second
-                    text = "Current amp: ${recorder.getAmplitude()}"
+                    text = "Current amp: ${RecordingService.instance?.getReading()}"
                 }
             }
         }) {
@@ -112,5 +128,19 @@ class MainActivity : ComponentActivity() {
         }
 
         Text(text)
+    }
+
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                CHANNEL_ID,
+                "Foreground Service Channel",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(serviceChannel)
+        }
     }
 }

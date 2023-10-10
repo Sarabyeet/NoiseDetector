@@ -31,8 +31,7 @@ class AudioRecorderImpl(private val context: Context): AudioRecorder {
     }
 
     fun getAmplitude(): Double {
-        return if (recorder != null) (20 * Math.log(recorder!!.maxAmplitude / 32767.0)).toInt()
-            .toDouble() else 0.0
+        return if (recorder != null) 20 * (log10(recorder!!.maxAmplitude.toDouble())) else 0.0
     }
 
     fun calculatePdBm(I: Double, Z: Double = 1000.0): Double {
